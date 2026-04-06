@@ -25,18 +25,25 @@ async function createBook(formData: FormData) {
   "use server";
   const profile = await requireAuth();
   const title = String(formData.get("title") ?? "").trim();
-  if (!title) return;
+  if (!title) {
+    throw new Error("请输入作品标题");
+  }
 
   const supabase = createSupabaseServerClient();
-  const { data: insertedBook } = await supabase
+  const { data: insertedBook, error: bookError } = await supabase
     .from("books")
     .insert({ user_id: profile.id, title, cover_url: "" })
     .select("id")
     .single();
 
-  if (!insertedBook?.id) return;
+  if (bookError) {
+    throw new Error(`新建作品失败：${bookError.message}`);
+  }
+  if (!insertedBook?.id) {
+    throw new Error("新建作品失败：未返回作品 ID");
+  }
 
-  const { data: insertedChapter } = await supabase
+  const { data: insertedChapter, error: chapterError } = await supabase
     .from("chapters")
     .insert({
       book_id: insertedBook.id,
@@ -48,10 +55,16 @@ async function createBook(formData: FormData) {
     .select("id")
     .single();
 
+  if (chapterError) {
+    throw new Error(`初始化章节失败：${chapterError.message}`);
+  }
+
   revalidatePath("/dashboard");
   if (insertedChapter?.id) {
     redirect(`/editor/${insertedBook.id}/${insertedChapter.id}`);
   }
+
+  throw new Error("初始化章节失败：未返回章节 ID");
 }
 
 async function deleteBook(formData: FormData) {
